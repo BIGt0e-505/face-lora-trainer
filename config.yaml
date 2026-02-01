@@ -1,0 +1,190 @@
+# ===========================================================================
+# Face LoRA Training Configuration
+# ===========================================================================
+# Adjust these settings for your specific use case.
+# See README.md for detailed explanations of each parameter.
+# ===========================================================================
+
+# --- Paths ---
+paths:
+  # SDXL base model — HuggingFace model ID or local path to safetensors
+  # The base SDXL 1.0 model is recommended for style-agnostic training.
+  # Your LoRA will be compatible with any SDXL-based model at inference
+  # (Illustrious, AnimagineXL, Pony, etc.)
+  pretrained_model: "stabilityai/stable-diffusion-xl-base-1.0"
+
+  # Path to your local clone of kohya-ss/sd-scripts
+  sd_scripts_dir: "./sd-scripts"
+
+  # Training dataset directory (processed images + .txt caption files)
+  train_data_dir: "./dataset/train"
+
+  # Regularisation images directory (leave empty string to disable)
+  reg_data_dir: "./dataset/reg"
+
+  # Output directory for LoRA checkpoints
+  output_dir: "./output"
+
+  # Output LoRA filename (without extension)
+  output_name: "face_lora"
+
+# --- Dataset ---
+dataset:
+  # Unique trigger word for your identity.
+  # Use something that doesn't exist in the model's vocabulary.
+  # Good examples: ohwx, sks, p3rs0n, jdoe42
+  # Bad examples: person, man, face (these are real words the model knows)
+  trigger_word: "ohwx"
+
+  # Class word — what you are. Used for regularisation and folder naming.
+  # Use "man", "woman", or "person" as appropriate.
+  class_word: "man"
+
+  # How many times to repeat training images per epoch.
+  # With 20 images and 10 repeats, you get 200 steps per epoch.
+  # Fewer images = more repeats needed.
+  num_repeats: 10
+
+  # Repeats for regularisation images (usually 1)
+  reg_repeats: 1
+
+# --- Network (LoRA) ---
+network:
+  # LoRA rank (dimension) — capacity of the LoRA.
+  #   16 = lightweight, less detail, faster training
+  #   32 = good balance for faces (recommended)
+  #   64 = maximum detail, higher VRAM, risk of overfitting
+  rank: 32
+
+  # LoRA alpha — scaling factor. Typically set to rank/2 or rank.
+  # Lower alpha = weaker effect per unit of LoRA scale at inference.
+  alpha: 16
+
+  # Network module — don't change unless using a different network type
+  module: "networks.lora"
+
+# --- Training ---
+training:
+  # Training resolution. Must match your base model.
+  # SDXL = 1024, SD 1.5 = 512
+  resolution: 1024
+
+  # Batch size. Keep at 1 for 12GB VRAM.
+  batch_size: 1
+
+  # Number of complete passes through the dataset.
+  # Start with 15 and check intermediate checkpoints.
+  epochs: 15
+
+  # UNet learning rate
+  learning_rate: 1.0e-4
+
+  # Text encoder learning rate (lower than UNet for stability)
+  text_encoder_learning_rate: 5.0e-5
+
+  # Optimizer — options: "AdamW8bit", "Prodigy", "AdamW"
+  # AdamW8bit: good default, low VRAM via bitsandbytes
+  # Prodigy: auto-tuning LR, set learning_rate to 1.0 if using this
+  optimizer: "AdamW8bit"
+
+  # LR scheduler — options: cosine, cosine_with_restarts, constant,
+  #                         constant_with_warmup, polynomial
+  scheduler: "cosine"
+
+  # Warmup ratio (fraction of total steps). 0.05 = 5% warmup.
+  warmup_ratio: 0.05
+
+  # Max gradient norm for clipping (stabilises training)
+  max_grad_norm: 1.0
+
+  # Random seed for reproducibility
+  seed: 42
+
+  # Train text encoder alongside UNet.
+  # Improves likeness at the cost of some flexibility.
+  train_text_encoder: true
+
+  # Noise offset — improves contrast in generated images.
+  # 0.0 to disable, 0.03-0.1 typical range.
+  noise_offset: 0.0357
+
+  # Min SNR gamma — training stability improvement.
+  # 0 to disable, 5 recommended.
+  min_snr_gamma: 5
+
+# --- VRAM Optimisation (12GB Profile) ---
+# These settings are tuned for GPUs with 12GB VRAM.
+# If you have more VRAM, you can disable some caching for speed.
+optimisation:
+  # Mixed precision — "bf16" or "fp16"
+  # bf16 recommended for Blackwell, Ada Lovelace, and Ampere GPUs.
+  # Use fp16 for older architectures (Turing, Pascal).
+  mixed_precision: "bf16"
+
+  # Gradient checkpointing — trades compute speed for VRAM savings.
+  # Essential for 12GB. Disable only if you have 24GB+.
+  gradient_checkpointing: true
+
+  # Cache VAE latents — pre-encodes images through the VAE once,
+  # then unloads it during training. Major VRAM savings.
+  cache_latents: true
+  cache_latents_to_disk: true
+
+  # Cache text encoder outputs — pre-encodes captions, then unloads
+  # both SDXL text encoders. Frees several GB of VRAM.
+  # NOTE: Disables token dropout and dynamic caption changes.
+  cache_text_encoder_outputs: true
+  cache_text_encoder_outputs_to_disk: true
+
+  # Attention implementation:
+  # sdpa = PyTorch native scaled dot-product attention (recommended)
+  # xformers = xformers library (alternative, requires separate install)
+  # Enable only ONE of these.
+  xformers: false
+  sdpa: true
+
+# --- Checkpoint Saving ---
+saving:
+  # Save a checkpoint every N epochs
+  save_every_n_epochs: 5
+
+  # Keep only the last N checkpoints (0 = keep all)
+  save_last_n_epochs: 0
+
+  # Precision for saved weights
+  save_precision: "fp16"
+
+  # Save format
+  save_model_as: "safetensors"
+
+# --- Regularisation Image Generation ---
+# Settings for generate_reg.py
+reg_generation:
+  # Number of regularisation images to generate.
+  # Rule of thumb: 5-10x the number of training images.
+  num_images: 200
+
+  # Prompt for generating reg images.
+  prompt: "a photo of a man, portrait, upper body, looking at viewer, neutral background, natural lighting"
+
+  # Negative prompt
+  negative_prompt: "low quality, blurry, deformed, watermark, text, logo, anime, cartoon, illustration"
+
+  # Generation settings
+  num_inference_steps: 30
+  guidance_scale: 7.5
+
+# --- Captioning ---
+# Settings for caption_images.py
+captioning:
+  # BLIP model for auto-captioning
+  model: "Salesforce/blip-image-captioning-large"
+
+  # Prepend trigger word to all generated captions
+  prepend_trigger: true
+
+  # Additional tags to append to every caption (comma-separated, or empty)
+  append_tags: ""
+
+  # Maximum caption length in tokens
+  max_length: 75
