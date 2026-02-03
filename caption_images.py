@@ -18,12 +18,41 @@ import argparse
 import sys
 from pathlib import Path
 
+import cv2
 import torch
 import yaml
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"}
+
+# Preview window name
+PREVIEW_WINDOW = "Caption Preview (press any key to continue)"
+
+
+def show_image_preview(image_path: Path, max_size: int = 800):
+    """
+    Display image in an OpenCV window, scaled to fit screen.
+    Window stays open until closed by close_image_preview().
+    """
+    img = cv2.imread(str(image_path))
+    if img is None:
+        return
+    
+    # Scale down if larger than max_size
+    h, w = img.shape[:2]
+    if max(h, w) > max_size:
+        scale = max_size / max(h, w)
+        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    
+    cv2.imshow(PREVIEW_WINDOW, img)
+    cv2.waitKey(1)  # Required to render the window
+
+
+def close_image_preview():
+    """Close the preview window."""
+    cv2.destroyWindow(PREVIEW_WINDOW)
+    cv2.waitKey(1)  # Process the close event
 
 
 def load_config(config_path: str) -> dict:
@@ -184,7 +213,14 @@ def main():
             if args.manual:
                 # Manual mode — prompt user for each caption
                 print(f"\n[{i}/{len(images)}] {img_path.name}")
+                
+                # Open image for preview
+                show_image_preview(img_path)
+                
                 caption_text = input("  Enter caption (describe what you see): ").strip()
+                
+                close_image_preview()
+                
                 if not caption_text:
                     print("  Skipped (no caption entered).")
                     continue
@@ -205,7 +241,14 @@ def main():
             if args.interactive and not args.manual:
                 print(f"\n[{i}/{len(images)}] {img_path.name}")
                 print(f"  Generated: {final_caption}")
+                
+                # Open image for preview
+                show_image_preview(img_path)
+                
                 edit = input("  Press Enter to accept, or type replacement: ").strip()
+                
+                close_image_preview()
+                
                 if edit:
                     final_caption = edit
                     # Ensure trigger word is still present
@@ -219,11 +262,13 @@ def main():
 
         except KeyboardInterrupt:
             print("\n\nInterrupted. Captions saved so far are preserved.")
+            cv2.destroyAllWindows()
             break
         except Exception as e:
             print(f"  [{i}/{len(images)}] FAILED: {img_path.name} — {e}")
 
     # Cleanup
+    cv2.destroyAllWindows()
     if model is not None:
         del model, processor
     if torch.cuda.is_available():

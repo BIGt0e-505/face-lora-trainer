@@ -131,7 +131,7 @@ face-lora-trainer/
 # 1. Put 15-30 photos in dataset/raw/
 
 # 2. Process photos (head detection + crop + resize)
-python prepare_photos.py --input ./dataset/raw --output ./dataset/train
+python prepare_photos.py
 
 # 3. Generate captions
 python caption_images.py --interactive
@@ -181,10 +181,10 @@ Phone photos work well. Look for images with good focus on the face. Screenshots
 ### Step 2: Processing Photos
 
 ```bash
-python prepare_photos.py --input ./dataset/raw --output ./dataset/train
+python prepare_photos.py
 ```
 
-This script:
+By default, this reads from `./dataset/raw` and writes to `./dataset/train`. The script:
 1. Detects the face in each photo using MediaPipe
 2. Expands the detection box to include the full head, hair, and upper shoulders
 3. Crops to a square centred on the head

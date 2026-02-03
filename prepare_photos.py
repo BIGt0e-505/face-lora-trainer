@@ -7,10 +7,10 @@ and centering the crop on it. Uses MediaPipe for fast, accurate face
 detection that works well across angles and lighting conditions.
 
 Usage:
-    python prepare_photos.py --input ./camera_photos --output ./dataset/train
-    python prepare_photos.py --input ./photos --output ./dataset/train --resolution 1024
-    python prepare_photos.py --input ./photos --output ./dataset/train --padding 0.5
-    python prepare_photos.py --input ./photos --output ./dataset/train --no-crop
+    python prepare_photos.py                                    # uses ./dataset/raw -> ./dataset/train
+    python prepare_photos.py --input ./my_photos                # custom input directory
+    python prepare_photos.py --padding 0.8                      # more space around the face
+    python prepare_photos.py --no-crop                          # maintain aspect ratio
 """
 
 import argparse
@@ -260,8 +260,8 @@ def main():
         description="Prepare camera photos for LoRA training with head detection"
     )
     parser.add_argument(
-        "--input", "-i", type=str, required=True,
-        help="Input directory containing camera photos"
+        "--input", "-i", type=str, default="./dataset/raw",
+        help="Input directory containing camera photos (default: ./dataset/raw)"
     )
     parser.add_argument(
         "--output", "-o", type=str, default="./dataset/train",
