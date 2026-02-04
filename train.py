@@ -146,6 +146,9 @@ def build_training_args(config: dict, train_dir: Path, reg_dir: Path | None) -> 
     args.extend(["--train_data_dir", str(train_dir)])
     if reg_dir and reg_dir.exists():
         args.extend(["--reg_data_dir", str(reg_dir)])
+    
+    # Caption files use .txt extension
+    args.extend(["--caption_extension", ".txt"])
 
     # ---- Output ----
     args.extend(["--output_dir", config["paths"]["output_dir"]])
@@ -167,10 +170,24 @@ def build_training_args(config: dict, train_dir: Path, reg_dir: Path | None) -> 
     args.extend(["--max_grad_norm", str(t["max_grad_norm"])])
 
     # Text encoder training
-    if t.get("train_text_encoder"):
-        args.append("--train_text_encoder")
+    # For SDXL, setting --text_encoder_lr enables text encoder training
+    # The argument takes two values: one for each text encoder (CLIP-L and OpenCLIP-G)
+    # NOTE: Cannot train text encoder while caching text encoder outputs
+    train_te = t.get("train_text_encoder", False)
+    cache_te = config["optimisation"].get("cache_text_encoder_outputs", False)
+    
+    if train_te and cache_te:
+        print("  Note: Disabling text encoder training (incompatible with TE output caching)")
+        print("        To train text encoder, set cache_text_encoder_outputs: false in config")
+        train_te = False
+    
+    if train_te:
         te_lr = t.get("text_encoder_learning_rate", t["learning_rate"])
-        args.extend(["--text_encoder_lr", str(te_lr)])
+        # Pass the same LR for both text encoders
+        args.extend(["--text_encoder_lr", str(te_lr), str(te_lr)])
+    else:
+        # Explicitly tell sd-scripts to only train UNet
+        args.append("--network_train_unet_only")
 
     # Warmup
     warmup = t.get("warmup_ratio", 0)
@@ -221,6 +238,10 @@ def build_training_args(config: dict, train_dir: Path, reg_dir: Path | None) -> 
         args.extend(["--save_last_n_epochs", str(sav["save_last_n_epochs"])])
     args.extend(["--save_precision", sav["save_precision"]])
     args.extend(["--save_model_as", sav["save_model_as"]])
+    
+    # Save training state for resuming
+    if sav.get("save_state"):
+        args.append("--save_state")
 
     # ---- Additional flags ----
     # Enable aspect ratio bucketing (handles varying image sizes)
@@ -250,6 +271,10 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Print the full training command without executing it"
+    )
+    parser.add_argument(
+        "--resume", type=str, default=None,
+        help="Resume training from a saved state directory (e.g., output/face_lora-000010-state)"
     )
     args = parser.parse_args()
 
@@ -284,6 +309,18 @@ def main():
     # Build training arguments
     training_args = build_training_args(config, train_dir, reg_dir)
 
+    # Handle resume from saved state
+    if args.resume:
+        resume_path = Path(args.resume)
+        if not resume_path.exists():
+            print(f"Error: Resume state not found: {resume_path}")
+            print("Available states:")
+            for state_dir in Path(config["paths"]["output_dir"]).glob("*-state"):
+                print(f"  {state_dir}")
+            sys.exit(1)
+        training_args.extend(["--resume", str(resume_path)])
+        print(f"Resuming from: {resume_path}")
+
     # Create output directory
     Path(config["paths"]["output_dir"]).mkdir(parents=True, exist_ok=True)
 
@@ -297,10 +334,10 @@ def main():
         cmd.extend(["--config_file", str(accel_config)])
 
     cmd.extend(["--num_cpu_threads_per_process", "1"])
-    cmd.append(str(train_script))
+    cmd.append(str(train_script.resolve()))  # Full path to script
     cmd.extend(training_args)
 
-    # Set environment
+    # Set environment — add sd-scripts to PYTHONPATH so its modules can be found
     env = os.environ.copy()
     env["PYTHONPATH"] = str(sd_scripts_dir.resolve()) + os.pathsep + env.get("PYTHONPATH", "")
 
@@ -343,8 +380,8 @@ def main():
     print("=" * 60)
     print()
 
-    # Launch training
-    result = subprocess.run(cmd, env=env, cwd=str(sd_scripts_dir.resolve()))
+    # Launch training (runs from current directory, not sd-scripts)
+    result = subprocess.run(cmd, env=env)
 
     if result.returncode == 0:
         print()

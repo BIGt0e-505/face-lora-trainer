@@ -157,6 +157,10 @@ saving:
   # Save format
   save_model_as: "safetensors"
 
+  # Save training state (optimizer, scheduler, etc.) for resuming
+  # Creates .state files alongside checkpoints — larger but allows exact resume
+  save_state: true
+
 # --- Regularisation Image Generation ---
 # Settings for generate_reg.py
 reg_generation:
