@@ -9,6 +9,9 @@ Without regularisation, prompting "a man" might always produce your face.
 With regularisation, the model learns your face is specifically tied to
 the trigger word while the class word retains its general meaning.
 
+Uses varied prompts to prevent the model from associating specific styles
+or contexts with the class word.
+
 Usage:
     python generate_reg.py                        # use config.yaml defaults
     python generate_reg.py --num-images 100        # generate 100 images
@@ -16,12 +19,15 @@ Usage:
 """
 
 import argparse
+import random
 import sys
 from pathlib import Path
 
 import torch
 import yaml
 from diffusers import StableDiffusionXLPipeline
+
+from reg_prompts import get_reg_prompts
 
 
 def load_config(config_path: str) -> dict:
@@ -50,6 +56,10 @@ def main():
         "--batch-size", type=int, default=1,
         help="Batch size for generation — increase if you have VRAM to spare"
     )
+    parser.add_argument(
+        "--single-prompt", action="store_true",
+        help="Use single prompt from config instead of varied prompts"
+    )
     args = parser.parse_args()
 
     # Load config
@@ -61,11 +71,22 @@ def main():
     class_word = config["dataset"]["class_word"]
 
     num_images = args.num_images or reg_config.get("num_images", 200)
-    prompt = reg_config.get("prompt", f"a photo of a {class_word}, portrait")
     negative_prompt = reg_config.get("negative_prompt", "low quality, blurry, deformed")
     steps = reg_config.get("num_inference_steps", 30)
     guidance = reg_config.get("guidance_scale", 7.5)
     seed = config["training"].get("seed", 42)
+
+    # Get prompts - either varied or single
+    if args.single_prompt:
+        single_prompt = reg_config.get("prompt", f"a photo of a {class_word}")
+        prompts = [single_prompt] * num_images
+        print(f"Using single prompt: {single_prompt}")
+    else:
+        prompts = get_reg_prompts(class_word, num_images)
+        # Shuffle so we don't always generate in the same order
+        random.seed(seed)
+        random.shuffle(prompts)
+        print(f"Using {len(set(prompts))} varied prompts for {num_images} images")
 
     reg_dir.mkdir(parents=True, exist_ok=True)
 
@@ -84,22 +105,30 @@ def main():
     print("=" * 60)
     print("Regularisation Image Generator")
     print("=" * 60)
-    print(f"Model:    {model_path}")
-    print(f"Prompt:   {prompt}")
-    print(f"Images:   {remaining} to generate ({existing_count} existing)")
-    print(f"Output:   {reg_dir}")
-    print(f"Steps:    {steps}")
-    print(f"Guidance: {guidance}")
+    print(f"Model:      {model_path}")
+    print(f"Class word: {class_word}")
+    print(f"Images:     {remaining} to generate ({existing_count} existing)")
+    print(f"Output:     {reg_dir}")
+    print(f"Steps:      {steps}")
+    print(f"Guidance:   {guidance}")
     print()
 
-    # Load pipeline with CPU offloading for 12GB VRAM
+    # Load pipeline
     print("Loading SDXL pipeline (this may download the model on first run — ~6.5GB)...")
-    pipe = StableDiffusionXLPipeline.from_pretrained(
-        model_path,
-        torch_dtype=torch.float16,
-        variant="fp16",
-        use_safetensors=True,
-    )
+    try:
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True,
+        )
+    except ValueError:
+        # fp16 variant not available
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+        )
     pipe.enable_model_cpu_offload()
 
     print("Pipeline loaded. Generating images...\n")
@@ -111,6 +140,9 @@ def main():
             idx = start_idx + i
             image_path = reg_dir / f"reg_{idx:04d}.png"
             caption_path = reg_dir / f"reg_{idx:04d}.txt"
+
+            # Get the prompt for this image
+            prompt = prompts[idx % len(prompts)]
 
             result = pipe(
                 prompt=prompt,
@@ -125,11 +157,11 @@ def main():
             image = result.images[0]
             image.save(image_path)
 
-            # Caption file contains the prompt (without trigger word)
+            # Caption file contains the prompt used
             caption_path.write_text(prompt, encoding="utf-8")
 
             progress = f"[{i + 1}/{remaining}]"
-            print(f"  {progress} {image_path.name}")
+            print(f"  {progress} {image_path.name}: {prompt[:50]}...")
 
     except KeyboardInterrupt:
         generated = i

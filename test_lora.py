@@ -152,22 +152,31 @@ def main():
 
     # Load pipeline
     print("Loading SDXL pipeline...")
-    pipe = StableDiffusionXLPipeline.from_pretrained(
-        model_path,
-        torch_dtype=torch.float16,
-        variant="fp16",
-        use_safetensors=True,
-    )
+    try:
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True,
+        )
+    except ValueError:
+        # fp16 variant not available, try without
+        print("  (fp16 variant not found, loading standard weights)")
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
+        )
     pipe.enable_model_cpu_offload()
 
     print("Loading LoRA weights...")
-    pipe.load_lora_weights(str(lora_path))
+    pipe.load_lora_weights(str(lora_path), adapter_name="face")
     print("Ready.\n")
 
     count = 0
     for scale in scales:
-        # Apply LoRA at the current scale
-        pipe.fuse_lora(lora_scale=scale)
+        # Apply LoRA at the current scale using set_adapters (cleaner than fuse/unfuse)
+        pipe.set_adapters(["face"], adapter_weights=[scale])
 
         generator = torch.Generator(device="cpu").manual_seed(args.seed)
 
@@ -189,9 +198,6 @@ def main():
 
             print(f"  [{count}/{total_images}] scale={scale:.1f} | {out_path.name}")
             print(f"    prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
-
-        # Unfuse before next scale
-        pipe.unfuse_lora()
 
     # Cleanup
     del pipe

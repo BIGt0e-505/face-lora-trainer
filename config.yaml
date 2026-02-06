@@ -11,7 +11,7 @@ paths:
   # The base SDXL 1.0 model is recommended for style-agnostic training.
   # Your LoRA will be compatible with any SDXL-based model at inference
   # (Illustrious, AnimagineXL, Pony, etc.)
-  pretrained_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  pretrained_model: "WhiteAiZ/Illustrious-xl-v1.0"
 
   # Path to your local clone of kohya-ss/sd-scripts
   sd_scripts_dir: "./sd-scripts"
@@ -34,7 +34,7 @@ dataset:
   # Use something that doesn't exist in the model's vocabulary.
   # Good examples: ohwx, sks, p3rs0n, jdoe42
   # Bad examples: person, man, face (these are real words the model knows)
-  trigger_word: "ohwx"
+  trigger_word: "BIGt0e"
 
   # Class word — what you are. Used for regularisation and folder naming.
   # Use "man", "woman", or "person" as appropriate.
@@ -47,6 +47,16 @@ dataset:
 
   # Repeats for regularisation images (usually 1)
   reg_repeats: 1
+
+  # Shuffle caption tags during training.
+  # Improves generalisation by preventing the model from learning tag order.
+  # Recommended for tag-based captions (comma-separated).
+  shuffle_caption: true
+
+  # Number of tokens to keep at the start when shuffling.
+  # Set to 1 to keep the trigger word first while shuffling the rest.
+  # Set to 0 to shuffle everything (not recommended if using trigger word).
+  keep_tokens: 1
 
 # --- Network (LoRA) ---
 network:
@@ -89,7 +99,13 @@ training:
 
   # LR scheduler — options: cosine, cosine_with_restarts, constant,
   #                         constant_with_warmup, polynomial
-  scheduler: "cosine"
+  # cosine_with_restarts recommended — restarts help escape local minima
+  scheduler: "cosine_with_restarts"
+
+  # Number of restart cycles for cosine_with_restarts scheduler.
+  # More cycles = more "jumps" during training, can improve convergence.
+  # 4 is the community-recommended value.
+  scheduler_num_cycles: 4
 
   # Warmup ratio (fraction of total steps). 0.05 = 5% warmup.
   warmup_ratio: 0.05

@@ -265,6 +265,8 @@ python caption_images.py --trigger-word mysecrettoken
 
 > **Important:** After auto-captioning, review the `.txt` files in `dataset/train/` and fix any mistakes. BLIP sometimes hallucinates details or gets descriptions wrong. Accurate captions directly impact training quality.
 
+> **Caption shuffling:** By default, the training script shuffles caption tags while keeping the trigger word first (`shuffle_caption: true`, `keep_tokens: 1` in config). This improves generalisation by preventing the model from learning that certain tags always appear in a specific order. This works best with comma-separated tag-style captions.
+
 ### Step 4: Regularisation Images (Optional but Recommended)
 
 ```bash
@@ -306,8 +308,12 @@ Edit `config.yaml` before training. The defaults are tuned for 12GB VRAM and sho
 
 **Advanced (usually leave alone):**
 - `optimisation.*` — VRAM settings. Only change with more or less VRAM.
+- `training.scheduler` — `cosine_with_restarts` is recommended. Restarts help escape local minima.
+- `training.scheduler_num_cycles` — Number of restarts. 4 is the community standard.
 - `training.noise_offset` — Helps with contrast. 0.0357 is a tested default.
 - `training.min_snr_gamma` — Training stability. 5 is standard.
+- `dataset.shuffle_caption` — Shuffles tags during training. Improves generalisation.
+- `dataset.keep_tokens` — Keeps trigger word first when shuffling. Set to 1.
 
 See the comments in `config.yaml` for detailed explanations of every parameter.
 
@@ -523,9 +529,9 @@ See `config.yaml` for the complete configuration with inline documentation. Summ
 | Section | Key Settings | Notes |
 |---------|-------------|-------|
 | `paths` | `pretrained_model`, `sd_scripts_dir`, data dirs | Use SDXL 1.0 HuggingFace ID for auto-download |
-| `dataset` | `trigger_word`, `class_word`, `num_repeats` | Repeats × images = steps per epoch |
+| `dataset` | `trigger_word`, `class_word`, `num_repeats`, `shuffle_caption`, `keep_tokens` | Repeats × images = steps per epoch. Shuffle improves generalisation. |
 | `network` | `rank`, `alpha` | Rank 32 / alpha 16 is a good starting point |
-| `training` | `epochs`, `learning_rate`, `optimizer` | AdamW8bit at 1e-4 for 15 epochs |
+| `training` | `epochs`, `learning_rate`, `optimizer`, `scheduler`, `scheduler_num_cycles` | AdamW8bit at 1e-4 for 15 epochs, cosine_with_restarts (4 cycles) |
 | `optimisation` | caching, precision, attention | All caching on for 12GB VRAM |
 | `saving` | checkpoint frequency, format | safetensors, every 5 epochs |
 

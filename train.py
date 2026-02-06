@@ -166,6 +166,12 @@ def build_training_args(config: dict, train_dir: Path, reg_dir: Path | None) -> 
     args.extend(["--max_train_epochs", str(t["epochs"])])
     args.extend(["--learning_rate", str(t["learning_rate"])])
     args.extend(["--lr_scheduler", t["scheduler"]])
+    
+    # Scheduler cycles (for cosine_with_restarts)
+    if t["scheduler"] == "cosine_with_restarts":
+        num_cycles = t.get("scheduler_num_cycles", 4)
+        args.extend(["--lr_scheduler_num_cycles", str(num_cycles)])
+    
     args.extend(["--seed", str(t["seed"])])
     args.extend(["--max_grad_norm", str(t["max_grad_norm"])])
 
@@ -246,6 +252,15 @@ def build_training_args(config: dict, train_dir: Path, reg_dir: Path | None) -> 
     # ---- Additional flags ----
     # Enable aspect ratio bucketing (handles varying image sizes)
     args.append("--enable_bucket")
+
+    # Caption shuffling (improves generalisation for tag-based captions)
+    # shuffle_caption shuffles tags while keep_tokens preserves the first N tags (trigger word)
+    ds = config.get("dataset", {})
+    if ds.get("shuffle_caption", True):
+        args.append("--shuffle_caption")
+        keep_tokens = ds.get("keep_tokens", 1)
+        if keep_tokens > 0:
+            args.extend(["--keep_tokens", str(keep_tokens)])
 
     # Logging
     log_dir = str(Path(config["paths"]["output_dir"]) / "logs")
