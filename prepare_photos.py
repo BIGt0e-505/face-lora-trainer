@@ -246,6 +246,89 @@ def process_image_no_crop(
     return True, f"resized ({img.size[0]}x{img.size[1]}) -> {output_file.name}"
 
 
+def process_image_face_centre(
+    input_path: Path,
+    output_path: Path,
+    detector: HeadDetector,
+    resolution: int,
+    allow_fallback: bool = True,
+) -> tuple[bool, str]:
+    """
+    Process image by keeping full width and cropping height to centre the face.
+    Creates a square output by:
+    1. Keeping the full original width
+    2. Cropping vertically to make it square, centred on the face
+    3. Resizing to target resolution
+    
+    This preserves full-body shots while ensuring the face is well-positioned.
+    """
+    # Load with OpenCV for MediaPipe compatibility
+    img_cv = cv2.imread(str(input_path))
+    if img_cv is None:
+        return False, "Failed to load image"
+    
+    img_height, img_width = img_cv.shape[:2]
+    
+    # Detect face
+    face_bbox = detector.detect(img_cv)
+    
+    if face_bbox is None:
+        if allow_fallback:
+            # Fallback: centre crop to square
+            if img_width > img_height:
+                # Landscape: crop sides
+                x = (img_width - img_height) // 2
+                crop_bbox = (x, 0, img_height, img_height)
+            else:
+                # Portrait: crop top/bottom from centre
+                y = (img_height - img_width) // 2
+                crop_bbox = (0, y, img_width, img_width)
+            method = "centre-crop (no face detected)"
+        else:
+            return False, "No face detected"
+    else:
+        # Get face centre
+        fx, fy, fw, fh = face_bbox
+        face_centre_y = fy + fh // 2
+        
+        if img_width >= img_height:
+            # Landscape or square: use full image (already wide enough)
+            crop_bbox = (0, 0, img_width, img_height)
+            method = "full image (landscape)"
+        else:
+            # Portrait: crop to square, keeping full width, centred on face
+            square_size = img_width
+            
+            # Calculate vertical crop centred on face
+            crop_top = face_centre_y - square_size // 2
+            
+            # Clamp to image bounds
+            if crop_top < 0:
+                crop_top = 0
+            elif crop_top + square_size > img_height:
+                crop_top = img_height - square_size
+            
+            crop_bbox = (0, crop_top, square_size, square_size)
+            method = "face-centred"
+    
+    # Crop
+    x, y, w, h = crop_bbox
+    cropped = img_cv[y:y+h, x:x+w]
+    
+    # Convert to PIL for high-quality resize
+    cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+    img_pil = Image.fromarray(cropped_rgb)
+    
+    # Resize to target resolution
+    img_pil = img_pil.resize((resolution, resolution), Image.LANCZOS)
+    
+    # Save
+    output_file = output_path / f"{input_path.stem}.png"
+    img_pil.save(output_file, "PNG")
+    
+    return True, f"{method} -> {output_file.name}"
+
+
 def get_image_files(directory: Path) -> list[Path]:
     """Find all supported image files in a directory."""
     files = []
@@ -282,6 +365,11 @@ def main():
              "Use with bucket resolution in training."
     )
     parser.add_argument(
+        "--head-zoom", action="store_true",
+        help="Zoom in on the head/face (old default behaviour). "
+             "Crops tightly around the detected face with padding."
+    )
+    parser.add_argument(
         "--confidence", type=float, default=0.5,
         help="Minimum face detection confidence (0.0-1.0, default: 0.5)"
     )
@@ -314,7 +402,13 @@ def main():
     print(f"Output:     {output_dir}")
     print(f"Resolution: {args.resolution}x{args.resolution}")
     print(f"Padding:    {args.padding}")
-    print(f"Mode:       {'resize only' if args.no_crop else 'head-centered square crop'}")
+    if args.no_crop:
+        mode = "resize only (no crop)"
+    elif args.head_zoom:
+        mode = "head-zoom (crop tight around face)"
+    else:
+        mode = "face-centred (keep full width, default)"
+    print(f"Mode:       {mode}")
     print()
     
     # Initialize detector
@@ -330,10 +424,17 @@ def main():
                 ok, msg = process_image_no_crop(
                     img_path, output_dir, detector, args.resolution
                 )
-            else:
+            elif args.head_zoom:
                 ok, msg = process_image_with_detection(
                     img_path, output_dir, detector,
                     args.resolution, args.padding,
+                    allow_fallback=not args.skip_no_face,
+                )
+            else:
+                # Default: face-centre mode
+                ok, msg = process_image_face_centre(
+                    img_path, output_dir, detector,
+                    args.resolution,
                     allow_fallback=not args.skip_no_face,
                 )
             

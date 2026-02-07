@@ -255,12 +255,19 @@ def build_training_args(config: dict, train_dir: Path, reg_dir: Path | None) -> 
 
     # Caption shuffling (improves generalisation for tag-based captions)
     # shuffle_caption shuffles tags while keep_tokens preserves the first N tags (trigger word)
+    # NOTE: Cannot use shuffle_caption when caching text encoder outputs
     ds = config.get("dataset", {})
+    cache_te = config["optimisation"].get("cache_text_encoder_outputs", False)
+    
     if ds.get("shuffle_caption", True):
-        args.append("--shuffle_caption")
-        keep_tokens = ds.get("keep_tokens", 1)
-        if keep_tokens > 0:
-            args.extend(["--keep_tokens", str(keep_tokens)])
+        if cache_te:
+            print("  Note: Disabling caption shuffling (incompatible with TE output caching)")
+            print("        To enable shuffling, set cache_text_encoder_outputs: false in config")
+        else:
+            args.append("--shuffle_caption")
+            keep_tokens = ds.get("keep_tokens", 1)
+            if keep_tokens > 0:
+                args.extend(["--keep_tokens", str(keep_tokens)])
 
     # Logging
     log_dir = str(Path(config["paths"]["output_dir"]) / "logs")

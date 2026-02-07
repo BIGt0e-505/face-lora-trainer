@@ -194,22 +194,26 @@ By default, this reads from `./dataset/raw` and writes to `./dataset/train`. The
 **Options:**
 
 ```bash
-# Adjust padding around the face (default: 0.6)
-# Higher values = more head/shoulders visible
-python prepare_photos.py --input ./photos --output ./dataset/train --padding 0.8
+# Adjust padding around the face (only used with --head-zoom)
+python prepare_photos.py --head-zoom --padding 0.8
 
 # Different resolution
-python prepare_photos.py --input ./photos --output ./dataset/train --resolution 768
+python prepare_photos.py --resolution 768
 
 # Skip images where no face is detected (instead of falling back to center crop)
-python prepare_photos.py --input ./photos --output ./dataset/train --skip-no-face
+python prepare_photos.py --skip-no-face
+
+# Zoom in tight on the head (old default behaviour)
+python prepare_photos.py --head-zoom
 
 # Maintain aspect ratio instead of cropping to square
-# (works with bucket resolution in training, enabled by default)
-python prepare_photos.py --input ./photos --output ./dataset/train --no-crop
+# (works with bucket resolution in training)
+python prepare_photos.py --no-crop
 ```
 
-> **Tip:** If the crops are cutting off hair or ears, increase `--padding` to 0.7 or 0.8. If too much background is included, decrease it to 0.4 or 0.5.
+> **Default mode (face-centre):** Keeps the full image width and only crops vertically to centre the face. This preserves full-body and mid-body shots while ensuring the face is well-positioned.
+
+> **Tip:** Use `--head-zoom` with `--padding 0.7` or `0.8` if you specifically want close-up crops for portrait-focused training.
 
 ### Step 3: Captioning / Tagging
 

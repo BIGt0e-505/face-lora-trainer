@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import torch
@@ -194,6 +195,32 @@ def main():
             filename = f"test_s{scale:.1f}_{i:02d}.png"
             out_path = output_dir / filename
             image.save(out_path)
+
+            # Save generation metadata as JSON
+            metadata = {
+                "image_file": filename,
+                "prompt": prompt,
+                "negative_prompt": args.negative_prompt,
+                "model": model_path,
+                "lora": {
+                    "path": str(lora_path),
+                    "scale": scale,
+                    "adapter_name": "face",
+                },
+                "trigger_word": trigger,
+                "class_word": class_word,
+                "generation": {
+                    "steps": args.steps,
+                    "guidance_scale": args.guidance,
+                    "seed": args.seed,
+                    "width": 1024,
+                    "height": 1024,
+                },
+            }
+            json_path = output_dir / f"test_s{scale:.1f}_{i:02d}.json"
+            with open(json_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+
             count += 1
 
             print(f"  [{count}/{total_images}] scale={scale:.1f} | {out_path.name}")

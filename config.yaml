@@ -34,7 +34,7 @@ dataset:
   # Use something that doesn't exist in the model's vocabulary.
   # Good examples: ohwx, sks, p3rs0n, jdoe42
   # Bad examples: person, man, face (these are real words the model knows)
-  trigger_word: "BIGt0e"
+  trigger_word: "y0ur_tr1gger_w0rd_h3re"
 
   # Class word — what you are. Used for regularisation and folder naming.
   # Use "man", "woman", or "person" as appropriate.
@@ -182,7 +182,7 @@ saving:
 reg_generation:
   # Number of regularisation images to generate.
   # Rule of thumb: 5-10x the number of training images.
-  num_images: 200
+  num_images: 50
 
   # Prompt for generating reg images.
   prompt: "a photo of a man, portrait, upper body, looking at viewer, neutral background, natural lighting"
